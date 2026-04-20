@@ -1,0 +1,28 @@
+=== DATASET INFO ===
+Shape: (7400, 2)
+Columns: ['input_text', 'label']
+
+=== EVALUATION RESULTS ===
+
+-> Checking ResultBert.ipynb:
+  No explicit accuracy/f1-score metrics found in outputs.
+
+-> Checking ResultPhobert.ipynb:
+  Accuracy: 98.78%
+  F1 Macro: 98.64%
+
+-> Checking ResultRoberta.ipynb:
+  Accuracy: 99.12%
+  F1 Macro: 99.00%
+
+-> Checking train_bert.ipynb:
+  No explicit accuracy/f1-score metrics found in outputs.
+
+-> Checking train_phobert.ipynb:
+  No explicit accuracy/f1-score metrics found in outputs.
+
+-> Checking train_roberta.ipynb:
+  No explicit accuracy/f1-score metrics found in outputs.
+
+-> Checking train_vigpt.ipynb:
+  No explicit accuracy/f1-score metrics found in outputs.

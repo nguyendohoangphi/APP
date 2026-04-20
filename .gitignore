@@ -1,0 +1,64 @@
+# ==========================================
+# Node.js
+# ==========================================
+node_modules/
+npm-debug.log*
+
+# ==========================================
+# Python
+# ==========================================
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+*.egg-info/
+dist/
+.ipynb_checkpoints/
+
+# ==========================================
+# Flutter / Dart
+# ==========================================
+**/build/
+**/.dart_tool/
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+**/pubspec.lock
+*.g.dart
+
+# ==========================================
+# Android
+# ==========================================
+**/android/.gradle/
+**/android/local.properties
+**/android/key.properties
+**/*.keystore
+**/*.jks
+
+# ==========================================
+# VS Code
+# ==========================================
+.vscode/
+
+# ==========================================
+# Environment / Secrets
+# ==========================================
+.env
+*.env
+google-services.json
+GoogleService-Info.plist
+**/keys/
+
+# ==========================================
+# AI Model weights (quá lớn cho GitHub)
+# ==========================================
+ai-engine/bert_final_clean/model.safetensors
+ai-engine/phobert_final_clean/model.safetensors
+ai-engine/roberta_final_clean/model.safetensors
+
+# ==========================================
+# Misc
+# ==========================================
+.DS_Store
+Thumbs.db
+tmp_*.py
+tmp_*.txt

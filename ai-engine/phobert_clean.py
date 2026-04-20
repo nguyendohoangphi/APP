@@ -1,0 +1,247 @@
+# ========================================
+!pip install transformers datasets accelerate evaluate scikit-learn pandas openpyxl -q
+
+
+# ========================================
+from google.colab import files
+uploaded = files.upload()  
+
+# ========================================
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder
+
+df = pd.read_excel('dataset.xlsx', engine='openpyxl')
+
+df = df[['input_text', 'label']].dropna()
+
+print(f" Total samples: {len(df)}")
+print(f" Total labels: {df['label'].nunique()}")
+print(f"\n Label distribution:")
+print(df['label'].value_counts())
+
+# ========================================
+label_encoder = LabelEncoder()
+df['label_encoded'] = label_encoder.fit_transform(df['label'])
+
+labels = label_encoder.classes_.tolist()
+print(f"\n Label Mapping:")
+for i, label in enumerate(labels):
+    print(f"  LABEL_{i}: {label}")
+
+NUM_LABELS = len(labels)
+print(f"\n Total labels: {NUM_LABELS}")
+
+
+# ========================================
+train_df, test_df = train_test_split(df, test_size=0.2, random_state=42, stratify=df['label_encoded'])
+
+print(f'Train samples: {len(train_df)}')
+print(f'Test samples: {len(test_df)}')
+
+import numpy as np
+from sklearn.utils.class_weight import compute_class_weight
+
+class_weights = compute_class_weight(
+    class_weight='balanced',
+    classes=np.unique(train_df['label_encoded']),
+    y=train_df['label_encoded']
+)
+
+print(f'\nClass weights computed for {len(class_weights)} classes.')
+
+
+# ========================================
+from transformers import AutoTokenizer, AutoModelForSequenceClassification
+
+MODEL_NAME = "vinai/phobert-base"
+
+tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+model = AutoModelForSequenceClassification.from_pretrained(
+    MODEL_NAME,
+    num_labels=NUM_LABELS
+)
+
+print(f" Loaded {MODEL_NAME} with {NUM_LABELS} labels")
+
+# ========================================
+from datasets import Dataset
+
+def tokenize_function(examples):
+    return tokenizer(
+        examples['input_text'],
+        padding='max_length',
+        truncation=True,
+        max_length=128
+    )
+
+train_dataset = Dataset.from_pandas(train_df[['input_text', 'label_encoded']].rename(columns={'label_encoded': 'label'}))
+test_dataset = Dataset.from_pandas(test_df[['input_text', 'label_encoded']].rename(columns={'label_encoded': 'label'}))
+
+train_dataset = train_dataset.map(tokenize_function, batched=True)
+test_dataset = test_dataset.map(tokenize_function, batched=True)
+
+print(f" Train: {len(train_dataset)}, Test: {len(test_dataset)}")
+
+# ========================================
+import torch
+from torch import nn
+from transformers import TrainingArguments, Trainer
+import evaluate
+import numpy as np
+
+accuracy = evaluate.load('accuracy')
+f1_metric = evaluate.load('f1')
+precision_metric = evaluate.load('precision')
+recall_metric = evaluate.load('recall')
+
+def compute_metrics(eval_pred):
+    predictions, labels = eval_pred
+    predictions = np.argmax(predictions, axis=1)
+    acc = accuracy.compute(predictions=predictions, references=labels)
+    f1 = f1_metric.compute(predictions=predictions, references=labels, average='macro')
+    precision = precision_metric.compute(predictions=predictions, references=labels, average='macro')
+    recall = recall_metric.compute(predictions=predictions, references=labels, average='macro')
+    return {
+        'accuracy': acc['accuracy'],
+        'f1_macro': f1['f1'],
+        'precision_macro': precision['precision'],
+        'recall_macro': recall['recall']
+    }
+
+training_args = TrainingArguments(
+    output_dir='./phobert-generic-classifier',
+    eval_strategy='epoch',
+    save_strategy='epoch',
+    learning_rate=2e-5,
+    per_device_train_batch_size=16,
+    per_device_eval_batch_size=16,
+    num_train_epochs=10,
+    weight_decay=0.01,
+    load_best_model_at_end=True,
+    metric_for_best_model='f1_macro',
+    logging_steps=10,
+    push_to_hub=False,
+)
+
+class CustomTrainer(Trainer):
+    def compute_loss(self, model, inputs, return_outputs=False, **kwargs):
+        labels = inputs.get('labels')
+        outputs = model(**inputs)
+        logits = outputs.get('logits')
+        
+        weights = torch.tensor(class_weights, dtype=torch.float32).to(model.device)
+        loss_fct = nn.CrossEntropyLoss(weight=weights)
+        loss = loss_fct(logits.view(-1, self.model.config.num_labels), labels.view(-1))
+        return (loss, outputs) if return_outputs else loss
+
+trainer = CustomTrainer(
+    model=model,
+    args=training_args,
+    train_dataset=train_dataset,
+    eval_dataset=test_dataset,
+    processing_class=tokenizer,
+    compute_metrics=compute_metrics,
+)
+
+print(' Custom Trainer with Class Weights configured')
+
+
+# ========================================
+print(" Starting training...")
+trainer.train()
+
+# ========================================
+results = trainer.evaluate()
+print(f'\n Evaluation Results:')
+print(f'  Accuracy: {results["eval_accuracy"]:.2%}')
+val1 = results.get("eval_precision_macro", 0)
+print(f'  Precision Macro: {val1:.2%}')
+val2 = results.get("eval_recall_macro", 0)
+print(f'  Recall Macro: {val2:.2%}')
+val3 = results.get("eval_f1_macro", 0)
+print(f'  F1 Macro: {val3:.2%}')
+print(f'  Loss: {results["eval_loss"]:.4f}')
+
+
+# ========================================
+from transformers import pipeline
+
+classifier = pipeline("text-classification", model=model, tokenizer=tokenizer, device=0)
+
+test_cases = [
+    ("xin chào", "GREETING"),
+    ("cảm ơn shop", "THANKS"),
+    ("menu có gì", "GET_MENU"),
+    ("cà phê có món gì", "GET_CATEGORY"),
+    ("giá bao nhiêu", "ASK_PRICE"),
+
+    ("có món gì mát không", "SUGGEST_COLD"),
+    ("thích uống ngọt", "SUGGEST_SWEET"),
+    ("đồ healthy", "SUGGEST_HEALTHY"),
+    ("cần tỉnh táo", "SUGGEST_ENERGY"),
+    ("ít đường", "SUGGEST_LESS_SUGAR"),
+    ("đồ cay", "SUGGEST_SPICY"),
+    ("thích ăn mặn", "SUGGEST_SALTY"),
+    ("bánh ngọt", "SUGGEST_CAKE"),
+    ("uống trà", "SUGGEST_TEA"),
+    ("nước ép trái cây", "SUGGEST_FRUIT"),
+    ("đá xay", "SUGGEST_FREEZE"),
+    ("socola", "SUGGEST_CHOCOLATE"),
+    ("detox thanh lọc", "SUGGEST_DETOX"),
+]
+
+print("\n" + "="*60)
+print(" TEST RESULTS")
+print("="*60)
+
+for text, expected in test_cases:
+    result = classifier(text)[0]
+    label_id = int(result['label'].replace('LABEL_', ''))
+    predicted = labels[label_id]
+    confidence = result['score']
+    
+    status = "oke" if predicted == expected else "error"
+    print(f"{status} '{text}'")
+    print(f"   Predicted: {predicted} ({confidence:.1%}) | Expected: {expected}")
+    print()
+
+# ========================================
+import json
+
+OUTPUT_DIR = "phobert-generic-classifier"
+
+model.save_pretrained(OUTPUT_DIR)
+tokenizer.save_pretrained(OUTPUT_DIR)
+
+# Save label mapping
+label_mapping = {
+    "labels": labels,
+    "id2label": {i: label for i, label in enumerate(labels)},
+    "label2id": {label: i for i, label in enumerate(labels)}
+}
+
+with open(f"{OUTPUT_DIR}/label_mapping.json", "w", encoding="utf-8") as f:
+    json.dump(label_mapping, f, ensure_ascii=False, indent=2)
+
+print(f" Model saved to {OUTPUT_DIR}/")
+print(f" Labels: {len(labels)}")
+
+# ========================================
+import os
+import shutil
+from google.colab import files
+
+CLEAN_DIR = "phobert_final_clean"
+os.makedirs(CLEAN_DIR, exist_ok=True)
+
+model.save_pretrained(CLEAN_DIR)
+tokenizer.save_pretrained(CLEAN_DIR)
+
+shutil.copy("phobert-generic-classifier/label_mapping.json", f"{CLEAN_DIR}/label_mapping.json")
+
+shutil.make_archive(CLEAN_DIR, 'zip', CLEAN_DIR)
+print(f" Đã tạo file {CLEAN_DIR}.zip ")
+
+files.download(f"{CLEAN_DIR}.zip")
+

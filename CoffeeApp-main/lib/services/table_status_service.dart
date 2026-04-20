@@ -1,0 +1,79 @@
+// ignore_for_file: avoid_print
+
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:coffeeapp/models/tablestatus.dart';
+import 'package:coffeeapp/services/table_in_database.dart';
+
+class TableStatusService {
+  final CollectionReference _tableRef = FirebaseFirestore.instance.collection(
+    TableInDatabase.TableStatusTable,
+  );
+
+  Future<void> createTable(TableStatus table) async {
+    try {
+      await _tableRef.doc(table.id).set(table.toJson());
+    } catch (e) {
+      throw Exception('Failed to create table: $e');
+    }
+  }
+
+  Future<void> updateBookingStatus(String id, bool isBooked) async {
+    try {
+      await _tableRef.doc(id).update({'isBooked': isBooked});
+    } catch (e) {
+      throw Exception('Failed to update booking status: $e');
+    }
+  }
+
+  Future<List<TableStatus>> getTableStatusList() async {
+    final snapshot = await _tableRef.get();
+
+    if (snapshot.docs.isEmpty) {
+      print("No table statuses found (collection empty)");
+      return [];
+    }
+
+    return snapshot.docs.map((doc) {
+      final data = doc.data() as Map<String, dynamic>;
+      data['id'] = doc.id;
+      return TableStatus.fromJson(data);
+    }).toList();
+  }
+
+  Future<List<TableStatus>> getTablesByBookingStatus(bool isBooked) async {
+    final snapshot = await _tableRef
+        .where('isBooked', isEqualTo: isBooked)
+        .get();
+
+    if (snapshot.docs.isEmpty) {
+      print("No tables found with isBooked = $isBooked");
+      return [];
+    }
+
+    return snapshot.docs.map((doc) {
+      final data = doc.data() as Map<String, dynamic>;
+      data['id'] = doc.id;
+      return TableStatus.fromJson(data);
+    }).toList();
+  }
+
+  Stream<List<TableStatus>> getTablesByBookingStatusStream(bool isBooked) {
+    return _tableRef.where('isBooked', isEqualTo: isBooked).snapshots().map((
+      snapshot,
+    ) {
+      return snapshot.docs.map((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        data['id'] = doc.id;
+        return TableStatus.fromJson(data);
+      }).toList();
+    });
+  }
+
+  Future<void> deleteTable(String id) async {
+    try {
+      await _tableRef.doc(id).delete();
+    } catch (e) {
+      throw Exception('Failed to delete table: $e');
+    }
+  }
+}
