@@ -71,7 +71,7 @@ class _StoreLocatorScreenState extends State<StoreLocatorScreen> {
 
       if (permission == LocationPermission.deniedForever) return;
 
-      // ✅ Bước 1: Thử lấy vị trí cũ (cached) trước - nhanh hơn nhiều
+      //  Bước 1: Thử lấy vị trí cũ (cached) trước - nhanh hơn nhiều
       Position? lastPosition = await Geolocator.getLastKnownPosition();
       if (lastPosition != null && mounted) {
         setState(() {
@@ -80,11 +80,10 @@ class _StoreLocatorScreenState extends State<StoreLocatorScreen> {
         _mapController.move(userLocation!, 14);
       }
 
-      // ✅ Bước 2: Lấy vị trí chính xác mới (không giới hạn thời gian)
+      // Bước 2: Lấy vị trí chính xác mới (không giới hạn thời gian)
       Position position = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
           accuracy: LocationAccuracy.high,
-          // Bỏ timeLimit - GPS cần thời gian cold start, không nên cắt sớm
         ),
       );
 
@@ -430,7 +429,7 @@ class _StoreLocatorScreenState extends State<StoreLocatorScreen> {
             ),
           ],
         ),
-        // ✅ Loading indicator khi đang lấy vị trí
+        // Loading indicator khi đang lấy vị trí
         if (_isLoadingLocation && userLocation == null)
           Positioned(
             bottom: 16,

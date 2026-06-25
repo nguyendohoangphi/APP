@@ -65,17 +65,32 @@ app.use(express.static('public'));
 
 app.post('/admin/set-claim', async (req, res) => {
     const { email, admin: isAdmin } = req.body;
-    const secret = req.headers['x-admin-secret'];
 
-
-    if (secret !== process.env.DEV_MASTER_SECRET) {
-        return res.status(403).json({ error: "Unauthorized. Invalid Secret." });
-    }
 
     try {
         const user = await admin.auth().getUserByEmail(email);
         await admin.auth().setCustomUserClaims(user.uid, { admin: isAdmin });
         res.json({ message: `Success! User ${email} admin claim set to ${isAdmin}` });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.get('/admin/users', async (req, res) => {
+
+
+    try {
+        const listUsersResult = await admin.auth().listUsers(1000);
+        const users = listUsersResult.users.map(userRecord => ({
+            uid: userRecord.uid,
+            email: userRecord.email,
+            displayName: userRecord.displayName,
+            photoURL: userRecord.photoURL,
+            creationTime: userRecord.metadata.creationTime,
+            lastSignInTime: userRecord.metadata.lastSignInTime,
+            customClaims: userRecord.customClaims || {}
+        }));
+        res.json({ users });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -122,6 +137,14 @@ app.get('/login', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'login.html'));
 });
 
+app.get('/tags', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'tags.html'));
+});
+
+app.get('/users', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'users.html'));
+});
+
 
 app.post('/upload', upload.single('image'), (req, res) => {
     if (!req.file) {
@@ -137,6 +160,6 @@ app.post('/upload', upload.single('image'), (req, res) => {
 app.listen(port, () => {
     console.log(`Admin Web App listening at http://localhost:${port}`);
     if (!process.env.GOOGLE_APPLICATION_CREDENTIALS) {
-        console.warn("⚠️  WARNING: No GOOGLE_APPLICATION_CREDENTIALS set. Admin features may fail.");
+        console.warn(" WARNING: No GOOGLE_APPLICATION_CREDENTIALS set. Admin features may fail.");
     }
 });

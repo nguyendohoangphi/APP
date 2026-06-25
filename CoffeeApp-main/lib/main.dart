@@ -1,7 +1,6 @@
 import 'package:coffeeapp/firebase_options.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
-import 'package:coffeeapp/screens/SplashScreen/splashscreen.dart';
 
 import 'package:coffeeapp/constants/app_theme.dart';
 import 'package:provider/provider.dart';
@@ -23,6 +22,12 @@ import 'package:coffeeapp/repositories/coupon_repository.dart';
 import 'package:coffeeapp/repositories/implementations/coupon_repository_impl.dart';
 import 'package:coffeeapp/repositories/table_repository.dart';
 import 'package:coffeeapp/repositories/implementations/table_repository_impl.dart';
+
+// Import các màn hình và dịch vụ cho AuthWrapper
+import 'package:coffeeapp/Transition/menunavigationbar.dart';
+import 'package:coffeeapp/models/global_data.dart';
+import 'package:coffeeapp/services/firebase_db_manager.dart';
+import 'package:coffeeapp/screens/Login_Register/coffeeloginregisterscreen.dart' hide AppTheme;
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -63,9 +68,59 @@ class MainApp extends StatelessWidget {
         theme: AppTheme.lightTheme,
         darkTheme: AppTheme.darkTheme,
         themeMode: ThemeMode.system,
-        home: const SplashScreen(),
+        home: const AuthWrapper(),
         debugShowCheckedModeBanner: false,
       ),
     );
   }
 }
+
+class AuthWrapper extends StatefulWidget {
+  const AuthWrapper({super.key});
+
+  @override
+  State<AuthWrapper> createState() => _AuthWrapperState();
+}
+
+class _AuthWrapperState extends State<AuthWrapper> {
+  bool _initialized = false;
+  bool _isLoggedIn = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkAuth();
+  }
+
+  Future<void> _checkAuth() async {
+    final userProfile = await FirebaseDBManager.authService.getProfile();
+    
+    if (mounted) {
+      setState(() {
+        if (userProfile != null) {
+          GlobalData.userDetail = userProfile;
+          _isLoggedIn = true;
+        } else {
+          _isLoggedIn = false;
+        }
+        _initialized = true;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_initialized) {
+      return const Scaffold(
+        body: Center(
+          child: CircularProgressIndicator(color: Color(0xFF6F4E37)), // Màu cà phê
+        ),
+      );
+    }
+
+    return _isLoggedIn
+        ? const MenuNavigationBar(isDark: false, selectedIndex: 0)
+        : const CoffeeLoginRegisterScreen();
+  }
+}
+

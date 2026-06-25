@@ -31,9 +31,10 @@ class ChatResponse(BaseModel):
     confidence: Optional[float] = None
     extracted_entity: Optional[str] = None
 
-PHOBERT_MODEL_PATH = "phobert_final_clean"
+PHOBERT_MODEL_PATH = "phobert_v2"
 DATASET_PATH = "dataset.xlsx"
 DATA_JS_PATH = "../admin-web/public/data.js"
+CONFIDENCE_THRESHOLD = 0.65  # Ngưỡng tin cậy tối thiểu
 
 GENERIC_LABELS = [
     "GREETING", "THANKS", "OTHER",
@@ -63,19 +64,19 @@ def load_phobert_model():
                 tokenizer=PHOBERT_MODEL_PATH,
                 device=-1
             )
-            print(f"✅ Loaded PhoBERT classifier from {PHOBERT_MODEL_PATH}")
+            print(f"[OK] Loaded PhoBERT classifier from {PHOBERT_MODEL_PATH}")
             
             label_mapping_path = os.path.join(PHOBERT_MODEL_PATH, "label_mapping.json")
             if os.path.exists(label_mapping_path):
                 with open(label_mapping_path, 'r', encoding='utf-8') as f:
                     label_data = json.load(f)
                     GENERIC_LABELS = label_data.get("labels", GENERIC_LABELS)
-                    print(f"✅ Loaded {len(GENERIC_LABELS)} labels")
+                    print(f"[OK] Loaded {len(GENERIC_LABELS)} labels")
             return True
         except Exception as e:
-            print(f"❌ Error loading PhoBERT: {e}")
+            print(f"[ERROR] Error loading PhoBERT: {e}")
     else:
-        print(f"⚠️ PhoBERT model not found at {PHOBERT_MODEL_PATH}")
+        print(f"[WARN] PhoBERT model not found at {PHOBERT_MODEL_PATH}")
     return False
 
 def load_menu_data():
@@ -109,10 +110,10 @@ def load_menu_data():
                     'tags': prod.get('tags', [])
                 }
         
-        print(f"✅ Loaded {len(MENU_DATA)} categories, {len(ALL_PRODUCTS)} products")
-        print(f"✅ Generated {len(CATEGORY_KEYWORDS)} category keywords for extraction")
+        print(f"[OK] Loaded {len(MENU_DATA)} categories, {len(ALL_PRODUCTS)} products")
+        print(f"[OK] Generated {len(CATEGORY_KEYWORDS)} category keywords for extraction")
     except Exception as e:
-        print(f"⚠️ Error loading menu: {e}")
+        print(f"[WARN] Error loading menu: {e}")
 
 def generate_category_keywords(cat_key: str, display_name: str) -> list:
     """Generate multiple keyword variations for a category."""
@@ -187,14 +188,41 @@ def classify_with_phobert(message: str) -> tuple:
         if label_id < len(GENERIC_LABELS):
             intent = GENERIC_LABELS[label_id]
             confidence = result['score']
-            print(f"🤖 PhoBERT: '{message[:50]}...' → {intent} ({confidence:.2%})")
+            print(f"[AI] PhoBERT: '{message[:50]}...' -> {intent} ({confidence:.2%})")
             return intent, confidence
     except Exception as e:
-        print(f"❌ PhoBERT error: {e}")
+        print(f"[ERROR] PhoBERT error: {e}")
     return "OTHER", 0.0
 
 def format_price(price: int) -> str:
     return f"{price:,}đ".replace(",", ".")
+
+def preprocess_message(message: str) -> str:
+    """Chuẩn hóa tin nhắn: viết thường, xử lý viết tắt"""
+    msg = message.strip().lower()
+    
+    # Map các từ viết tắt phổ biến
+    abbreviations = {
+        'cf': 'cà phê',
+        'cafe': 'cà phê',
+        'tra sua': 'trà sữa', 
+        'da xay': 'đá xay',
+        'banh': 'bánh',
+        'nuoc ep': 'nước ép',
+        'ko': 'không',
+        'ntn': 'như thế nào',
+        'dc': 'được',
+        'mk': 'mình',
+        'mn': 'mọi người',
+        'ck': 'chúc',
+        'ok': 'oke',
+    }
+    
+    # Thay thế từ viết tắt
+    for abbr, full in abbreviations.items():
+        msg = re.sub(rf'\b{abbr}\b', full, msg)
+    
+    return msg
 
 def filter_products_by_tag(target_tag: str) -> list:
     """Helper to filter products by a specific tag."""
@@ -206,17 +234,17 @@ def filter_products_by_tag(target_tag: str) -> list:
 
 def handle_greeting() -> str:
     responses = [
-        "Xin chào! Mình là trợ lý AI của quán. Bạn muốn uống gì? ☕",
-        "Chào bạn! Hôm nay bạn muốn thưởng thức gì nào? 😊",
-        "Hello! Mình có thể giúp gì cho bạn? ☕"
+        "Xin chao! Minh la tro ly AI cua quan. Ban muon uong gi?",
+        "Chao ban! Hom nay ban muon thuong thuc gi nao?",
+        "Hello! Minh co the giup gi cho ban?"
     ]
     return random.choice(responses)
 
 def handle_thanks() -> str:
     responses = [
-        "Không có chi! Chúc bạn ngon miệng! 😊",
-        "Cảm ơn bạn đã ghé quán! 🙏",
-        "Rất vui được phục vụ bạn! 😄"
+        "Khong co chi! Chuc ban ngon mieng!",
+        "Cam on ban da ghe quan!",
+        "Rat vui duoc phuc vu ban!"
     ]
     return random.choice(responses)
 
@@ -225,8 +253,8 @@ def handle_get_menu() -> str:
     if not MENU_DATA:
         return "Xin lỗi, menu đang được cập nhật."
     
-    cats = [f"• {c['displayName']}" for c in MENU_DATA.values()]
-    return f"📋 Menu của quán:\n" + "\n".join(cats) + "\n\nBạn muốn xem gì?"
+    cats = [f"- {c['displayName']}" for c in MENU_DATA.values()]
+    return f"Menu cua quan:\n" + "\n".join(cats) + "\n\nBan muon xem gi?"
 
 def handle_get_category(message: str) -> tuple:
     """
@@ -239,7 +267,7 @@ def handle_get_category(message: str) -> tuple:
         cat_data = MENU_DATA[cat_key]
         prods = ", ".join([f"{p['name']} ({format_price(p['price'])})" 
                           for p in cat_data['products'][:6]])
-        response = f"📂 {cat_data['displayName']} có:\n{prods}"
+        response = f"{cat_data['displayName']} co:\n{prods}"
         return response, matched
     
     cats = ", ".join([c['displayName'] for c in MENU_DATA.values()])
@@ -253,12 +281,12 @@ def handle_ask_price(message: str) -> tuple:
     product = extract_product_entity(message)
     
     if product:
-        response = f"🏷️ {product['name']}: {format_price(product['price'])}"
+        response = f"{product['name']}: {format_price(product['price'])}"
         if product['description']:
-            response += f"\n📝 {product['description']}"
+            response += f"\n{product['description']}"
         return response, product['name']
     
-    return "Bạn muốn hỏi giá món nào? Cho mình biết tên món nhé! 😊", None
+    return "Ban muon hoi gia mon nao? Cho minh biet ten mon nhe!", None
 
 def handle_other(message: str = "") -> str:
     """
@@ -269,12 +297,12 @@ def handle_other(message: str = "") -> str:
     if message:
         product = extract_product_entity(message)
         if product:
-            response = f"🏷️ {product['name']}: {format_price(product['price'])}"
+            response = f"{product['name']}: {format_price(product['price'])}"
             if product['description']:
-                response += f"\n📝 {product['description']}"
+                response += f"\n{product['description']}"
             return response
 
-    return "Mình chưa hiểu lắm. Thử hỏi: 'Menu có gì?', 'Cà phê có gì?', hoặc 'Gợi ý món lạnh đi' 😊"
+    return "Minh chua hieu lam. Thu hoi: 'Menu co gi?', 'Ca phe co gi?', hoac 'Goi y mon lanh di'"
 
 def handle_suggestion(intent: str) -> str:
     """
@@ -292,27 +320,38 @@ def handle_suggestion(intent: str) -> str:
             "spicy": "cay nồng", "salty": "đậm đà", "cake": "bánh ngọt"
         }
         adjective = friendly_names.get(tag_key, tag_key)
-        return f"✨ Gợi ý món {adjective} cho bạn:\n• " + "\n• ".join(items[:6])
+        return f"Goi y mon {adjective} cho ban:\n- " + "\n- ".join(items[:6])
         
-    return f"Hiện tại quán chưa có món nào theo yêu cầu '{tag_key}' của bạn. Thử món khác nhé? 😊"
+    return f"Hien tai quan chua co mon nao theo yeu cau '{tag_key}' cua ban. Thu mon khac nhe?"
 
 @app.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
     """
-    🔥 GENERIC LABELS ARCHITECTURE (Dynamic Handling)
+    GENERIC LABELS ARCHITECTURE (Dynamic Handling)
     """
-    message = request.message.strip()
-    if not message:
-        return ChatResponse(response="Bạn muốn hỏi gì về menu? 😊")
+    original_message = request.message.strip()
+    if not original_message:
+        return ChatResponse(response="Ban muon hoi gi ve menu?")
     
+    # 1. Tiền xử lý tin nhắn
+    message = preprocess_message(original_message)
+    
+    # 2. Phân loại intent bằng PhoBERT
     intent, confidence = classify_with_phobert(message)
     extracted_entity = None
     response = ""
     
+    # 3. Fallback theo Confidence Threshold
+    if confidence < CONFIDENCE_THRESHOLD:
+        print(f"[WARN] Low confidence ({confidence:.2%}) for '{intent}', falling back to OTHER")
+        intent = "OTHER"
+    
+    # 4. Kiểm tra món ăn trực tiếp 
     product_check = extract_product_entity(message)
     if product_check and intent not in ["GREETING", "THANKS", "GET_MENU", "GET_CATEGORY"]:
         intent = "ASK_PRICE"
     
+    # 5. Xử lý theo Intent
     if intent == "GREETING":
         response = handle_greeting()
     
@@ -349,7 +388,7 @@ async def root():
     return {
         "name": "Coffee Shop AI API - Generic Labels Architecture",
         "model": "PhoBERT Fine-tuned (12 generic labels)",
-        "architecture": "Model understands INTENT → Entity Extraction finds WHAT → DB provides DATA",
+        "architecture": "Model understands INTENT -> Entity Extraction finds WHAT -> DB provides DATA",
         "labels": GENERIC_LABELS,
         "categories": len(MENU_DATA),
         "products": len(ALL_PRODUCTS),

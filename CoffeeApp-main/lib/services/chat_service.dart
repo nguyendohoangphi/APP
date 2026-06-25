@@ -1,9 +1,8 @@
-import 'dart:convert';
+  import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 class ChatService {
-  final String baseUrl = "http://10.0.119.176:8000";
-
+  final String baseUrl = "http://10.13.153.159:8000";
   Future<String> sendMessage(String message) async {
     try {
       final response = await http.post(
