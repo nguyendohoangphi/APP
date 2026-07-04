@@ -62,7 +62,7 @@ app.post('/create_payment_url', (req, res) => {
 
         const signData = querystring.stringify(vnp_Params, { encode: false });
         const hmac = crypto.createHmac("sha512", VNPAY_HASH_SECRET);
-        const signed = hmac.update(new Buffer.from(signData, 'utf-8')).digest("hex");
+        const signed = hmac.update(Buffer.from(signData, 'utf-8')).digest("hex");
 
         vnp_Params['vnp_SecureHash'] = signed;
         let vnpUrl = VNPAY_URL + '?' + querystring.stringify(vnp_Params, { encode: false });
@@ -87,7 +87,7 @@ app.get('/vnpay_ipn', (req, res) => {
     vnp_Params = sortObject(vnp_Params);
     let signData = querystring.stringify(vnp_Params, { encode: false });
     let hmac = crypto.createHmac("sha512", VNPAY_HASH_SECRET);
-    let signed = hmac.update(new Buffer.from(signData, 'utf-8')).digest("hex");
+    let signed = hmac.update(Buffer.from(signData, 'utf-8')).digest("hex");
 
     if (secureHash === signed) {
         // check data đơn hàng có trùng khớp không
